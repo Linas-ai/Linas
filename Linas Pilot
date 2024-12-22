@@ -1,0 +1,159 @@
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+--//Config\\--
+local StandSpeed = 1.5
+local PilotJumpPower = 1.5
+local HideBody = true
+local TeleportBodyToStand = true
+local BodyDistance = 37
+local PilotKey = Enum.KeyCode.H
+
+--//Indexs/Setup Variables\\--
+local LocalPlayer = game.Players.LocalPlayer
+local TempStore = Instance.new("Folder", game.ReplicatedStorage)
+TempStore.Name = "TempStorage"
+
+local function UpdateIndex()
+	CurrentCharacter = LocalPlayer.Character
+	Humanoid = CurrentCharacter:FindFirstChildOfClass("Humanoid")
+	SummonedStand = CurrentCharacter:FindFirstChild("SummonedStand")
+	
+	StandMorph = CurrentCharacter:FindFirstChild("StandMorph")
+	StandHumanoid = StandMorph:FindFirstChildOfClass("Humanoid")
+	
+	Camera = workspace.CurrentCamera
+end	
+
+repeat task.wait() until LocalPlayer.Character:FindFirstChild("StandMorph")
+UpdateIndex()
+
+local function PilotStand()
+	UpdateIndex()
+	
+	for i,v in pairs(workspace.Locations:GetChildren()) do
+		if v.Name == "Naples' Sewers" then
+			v.Parent = TempStore
+		end
+	end
+
+	local CameraValue = Instance.new("ObjectValue", StandMorph.Parent)
+	local PilotFunctions = {["FocusCam"] = CameraValue, ["CFrame"] = CurrentCharacter.PrimaryPart.CFrame}
+
+	CameraValue.Name = "FocusCam"
+	CameraValue.Value = StandHumanoid
+	
+	for _,v in pairs(CurrentCharacter:GetChildren()) do
+		if v:IsA("BasePart") then
+			v.CanCollide = false
+		end
+	end
+	
+	--//Jumping\\--
+	PilotFunctions["JumpSignal"] = Humanoid:GetPropertyChangedSignal("Jump"):Connect(function()
+		if Humanoid.Jump then
+	    	StandHumanoid.Jump = true
+	    end
+	end)
+	
+	--//WalkSpeed\\--
+	StandHumanoid.WalkSpeed = Humanoid.WalkSpeed*StandSpeed
+	PilotFunctions["PilotSpeed"] = Humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+	    StandHumanoid.WalkSpeed = Humanoid.WalkSpeed*StandSpeed
+	end)
+	
+	
+	--//Jump Power\\--
+	StandHumanoid.JumpPower = Humanoid.JumpPower*PilotJumpPower
+	PilotFunctions["JumpPower"] = Humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
+	    StandHumanoid.JumpPower = Humanoid.JumpPower*PilotJumpPower
+	end)
+	
+	if not HideBody then
+		CurrentCharacter.PrimaryPart.Anchored = true
+	end
+	
+	--//Walking\\--
+	PilotFunctions["LoopTP"] = RunService.Heartbeat:Connect(function()
+		local MoveDirection = Camera.CFrame:VectorToObjectSpace(Humanoid.MoveDirection)
+		StandHumanoid:Move(MoveDirection, true)
+		
+		if HideBody then
+			CurrentCharacter.PrimaryPart.CFrame = StandMorph.PrimaryPart.CFrame+Vector3.new(0,-BodyDistance,0)
+		end
+	end)
+	
+	StandMorph:FindFirstChild("AlignOrientation", true).Enabled = false
+	StandMorph:FindFirstChild("AlignPosition", true).Enabled = false
+	for i,v in pairs(StandMorph:GetDescendants()) do
+	    if v:IsA("BasePart") or v:IsA("UnionOperation") then
+	        game:GetService("PhysicsService"):SetPartCollisionGroup(v, "Players")
+	    end
+	end
+	return PilotFunctions
+end
+
+local function UnPilotStand(Returned)
+	UpdateIndex()
+	
+	for i,v in pairs(game.ReplicatedStorage.TempStorage:GetChildren()) do
+		if v.Name == "Naples' Sewers" then
+			v.Parent = workspace.Locations
+		end
+	end
+
+	for x,v in pairs(Returned) do
+		if tostring(v) == "Connection" then
+			v:Disconnect()
+		end
+	end
+	
+	Returned["FocusCam"]:Destroy()
+	
+	CurrentCharacter.PrimaryPart.Velocity = Vector3.new()
+	if TeleportBodyToStand then
+		CurrentCharacter.PrimaryPart.CFrame = StandMorph.PrimaryPart.CFrame
+	else
+		CurrentCharacter.PrimaryPart.CFrame = Returned["CFrame"]
+	end
+	
+	StandMorph:FindFirstChild("AlignOrientation", true).Enabled = true
+	StandMorph:FindFirstChild("AlignPosition", true).Enabled = true
+	for i,v in pairs(StandMorph:GetDescendants()) do
+	    if v:IsA("BasePart") or v:IsA("UnionOperation") then
+	        game:GetService("PhysicsService"):SetPartCollisionGroup(v, "Stands")
+	    end
+	end
+	
+	if not HideBody then
+		CurrentCharacter.PrimaryPart.Anchored = false
+	end
+end
+
+local StayInPilot = Instance.new("BoolValue", workspace)
+StayInPilot.Value = false
+
+SummonedStand:GetPropertyChangedSignal("Value"):Connect(function()
+	if not SummonedStand.Value then
+    	StayInPilot.Value = false
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(InputObject)
+	if UserInputService:GetFocusedTextBox() then
+		return
+	end
+
+	if InputObject.KeyCode == PilotKey then
+		StayInPilot.Value = not StayInPilot.Value
+	end
+end)
+
+local CurrentArgs
+StayInPilot:GetPropertyChangedSignal("Value"):Connect(function()
+    if StayInPilot.Value then
+    	CurrentArgs = PilotStand()
+    else
+    	UnPilotStand(CurrentArgs)
+    end
+end)
